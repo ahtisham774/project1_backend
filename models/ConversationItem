@@ -1,0 +1,16 @@
+const mongoose = require("mongoose")
+
+const ConversationItemSchema = new mongoose.Schema({
+    name: {
+        type: String,
+    },
+    text: {
+        type: String,
+    },
+    translation: {
+        type: String,
+    },
+})
+
+const ConversationItem = mongoose.model("ConversationItem", ConversationItemSchema)
+module.exports = ConversationItem
