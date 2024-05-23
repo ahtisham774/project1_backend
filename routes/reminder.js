@@ -6,5 +6,6 @@ router.post('/:id/create', reminderController.createReminder);
 router.get('/:id/get', reminderController.getAllReminders);
 router.put('/mark/:id', reminderController.updateReminder);
 router.put('/:id/delete', reminderController.deleteReminder);
+router.put("/:id/update-order",reminderController.updateOrder)
 
 module.exports = router;

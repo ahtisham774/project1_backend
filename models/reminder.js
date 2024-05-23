@@ -18,6 +18,10 @@ const ReminderSchema = new mongoose.Schema({
             isDone: {
                 type: Boolean,
                 default: false
+            },
+            order:{
+                type:Number,
+                default:0
             }
         }
     ]

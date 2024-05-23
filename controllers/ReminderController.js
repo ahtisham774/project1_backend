@@ -80,3 +80,26 @@ exports.updateReminder = async (req, res) => {
         return res.status(500).json({ message: err.message })
     }
 }
+
+
+exports.updateOrder = async (req, res) => {
+    try {
+        const teacher = req.params.id
+        const { reminders } = req.body
+        const data = await Reminder.findOne({ teacher })
+        if (!data) {
+            return res.status(404).json({ message: "Teacher Not found" })
+        }
+        reminders.forEach(element => {
+            data.reminders.id(element._id).order = element.order
+
+        });
+        await data.save()
+        return res.status(200).json({ message: "Order Updated" })
+    }
+    catch (err) {
+        return res.status(500).json({ message: err.message })
+    }
+
+
+}
