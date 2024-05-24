@@ -2,6 +2,10 @@
 const mongoose = require('mongoose');
 
 const homeworkSchema = new mongoose.Schema({
+    title: {
+        type: String,
+        required: true
+    },
 
     link: {
         type: String,

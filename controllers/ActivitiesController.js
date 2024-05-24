@@ -250,7 +250,7 @@ const updateConversationAudio = async (req, res) => {
 const createActivities = async (req, res, next) => {
     try {
         const id = req.params.id;
-        const { title, description, type } = req.body;
+        const { title,  type } = req.body;
         //get coverImage
         const coverImage = req.file.filename;
 
@@ -266,7 +266,7 @@ const createActivities = async (req, res, next) => {
         // Create a new subject with the given name and coverImage
         const activities = new Activity({
             title,
-            description,
+        
             type,
             coverImage,
         });

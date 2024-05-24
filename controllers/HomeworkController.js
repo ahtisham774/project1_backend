@@ -1,7 +1,8 @@
 
 const Homework = require('../models/Homework');
 const HomeworkLevel = require("../models/HomeworkLevels")
-const HomeworkActivity = require("../models/HomeworkActivity")
+const HomeworkActivity = require("../models/HomeworkActivity");
+const Activity = require('../models/Activities');
 
 
 // Middleware function to get a specific homework by ID
@@ -35,11 +36,12 @@ async function getHomeworkById(req, res, next) {
 async function createHomework(req, res) {
     try {
         const id = req.params.id
-        let activity = await HomeworkActivity.findById(id);
+        let activity = await Activity.findById(id);
         if (!activity) {
             return res.status(404).json({ message: 'Activity not found' });
         }
         const homework = new Homework({
+            title: req.body.title,
             link: req.body.link,
             dueDate: req.body.dueDate,
             isDone: req.body.isDone,
@@ -117,9 +119,9 @@ async function getAllHomeworkActivities(req, res) {
 async function getAllHomework(req, res) {
     let id = req.params.id
     try {
-        const homework = await HomeworkActivity.findById(id).
+        const homework = await Activity.findById(id).
             select("homeworks").
-            populate('homeworks', { link: 1, dueDate: 1, isDone: 1 })
+            populate('homeworks', { title: 1, link: 1, dueDate: 1, isDone: 1 })
             ;
         res.json(homework);
     } catch (err) {

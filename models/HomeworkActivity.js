@@ -12,5 +12,5 @@ const homeworkActivitySchema = new mongoose.Schema({
 
 })
 
-const HomeworkActivity = mongoose.model('HomeworkActivity', homeworkActivitySchema);
+const   HomeworkActivity = mongoose.model('HomeworkActivity', homeworkActivitySchema);
 module.exports=HomeworkActivity;
