@@ -37,9 +37,17 @@ const uploadAudio = multer({ storage: audioStorage });
 const upload = multer({ storage: storage });
 // Middleware function to fetch a subject by ID and attach it to the request object
 const getAllActivities = async (req, res, next) => {
-  
+
     try {
 
+        const activities = await Subject.findById(req.params.id).select("activities")
+        console.log(activities)
+        const data = await Activity.find(
+            {
+                _id: { $in: activities.activities }
+            }
+        )
+        console.log(data)
         let subject = await Subject.findOne({ _id: req.params.id }).select("subject activities")
             .populate({
                 path: 'activities',
@@ -138,13 +146,13 @@ const deleteConversation = async (req, res) => {
             { _id: conversationId },
             { $pull: { conversations: { _id: conversation_id } } }
         );
-        console.log(result)
+
         // Check if any modifications were made
         if (result.modifiedCount === 0) {
             return res.status(404).json({ message: 'Conversation not found or not modified' });
         }
 
-        return res.status(200).json({ message: "Successfully deleted!!!" });
+        return res.status(200).json({ message: "Successfully deleted!!!", id: conversation_id });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Server error' });
@@ -206,7 +214,7 @@ const deleteLessonGame = async (req, res) => {
         const gameId = req.query.gameId;
         console.log(lessonId)
         console.log(gameId)
-       const updateLesson = await Lesson.updateOne({
+        const updateLesson = await Lesson.updateOne({
             _id: lessonId
         }, {
             $pull: {
@@ -250,7 +258,7 @@ const updateConversationAudio = async (req, res) => {
 const createActivities = async (req, res, next) => {
     try {
         const id = req.params.id;
-        const { title,  type } = req.body;
+        const { title, type } = req.body;
         //get coverImage
         const coverImage = req.file.filename;
 
@@ -266,7 +274,6 @@ const createActivities = async (req, res, next) => {
         // Create a new subject with the given name and coverImage
         const activities = new Activity({
             title,
-        
             type,
             coverImage,
         });
@@ -290,7 +297,7 @@ const createActivities = async (req, res, next) => {
 const addLesson = async (req, res, next) => {
     try {
         const id = req.params.id;
-        const { title, description, type } = req.body
+        const { title, type } = req.body
         //get coverImage
         const coverImage = req.file.filename;
 
@@ -304,7 +311,6 @@ const addLesson = async (req, res, next) => {
         //create new Lesson
         const lesson = new Lesson({
             title,
-            description,
             type,
             coverImage
         })
@@ -333,6 +339,7 @@ const addMaterial = async (req, res, next) => {
         if (!lesson) {
             return res.status(404).json({ message: 'Lesson not found' });
         }
+
         lesson.materials.push(coverImage)
         await lesson.save();
         return res.status(200).json({ message: "Successfully added!!!" })
@@ -412,23 +419,45 @@ const updateConversation = async (req, res) => {
     try {
         const id = req.params.id;
         const { title } = req.body;
+        const conversations = JSON.parse(req.body.conversations)
 
-       
+
 
         const conversation = await Conversation.findById(id);
         if (!conversation) {
             return res.status(404).json({ message: 'Conversation not found' });
         }
-        if(req.file){
+        if (req.file) {
             conversation.audio = req.file.filename;
         }
-        if(title){
+        if (title) {
             conversation.title = title;
         }
-       
+    
+        for (const con of conversations) {
+            const person1Item = await ConversationItem.findById(con.person1._id)
+            if (!person1Item) {
+                return res.status(404).json({ message: 'Conversation item not found' });
+            }
+            person1Item.name = con.person1.name;
+            person1Item.text = con.person1.text;
+            person1Item.translation = con.person1.translation;
+            await person1Item.save();
+
+            const person2Item = await ConversationItem.findById(con.person2._id)
+            if (!person2Item) {
+                return res.status(404).json({ message: 'Conversation item not found' });
+            }
+            person2Item.name = con.person2.name;
+            person2Item.text = con.person2.text;
+            person2Item.translation = con.person2.translation;
+            await person2Item.save();
+
+        }
+
         await conversation.save();
 
-        return res.status(200).json({ message: 'Successfully updated!!!' });
+        return res.status(200).json({ message: 'Successfully updated!!!', conversations: conversations });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Server error' });
@@ -477,6 +506,67 @@ const createConversationItem = async (req, res) => {
         console.error(error);
         return res.status(500).json({ message: 'Server error' });
     }
+}
+
+const addConversationBelow = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const conversation = JSON.parse(req.body.conversation);
+        const index = req.body.index
+        const conversationDoc = await Conversation.findById(id);
+
+        if (!conversation) {
+            return res.status(404).json({ message: 'Conversation not found' });
+        }
+        let conversationIds;
+
+        const person1Item = new ConversationItem({
+            name: conversation.person1.name,
+            text: conversation.person1.text,
+            translation: conversation.person1.translation,
+        });
+        const person2Item = new ConversationItem({
+            name: conversation.person2.name,
+            text: conversation.person2.text,
+            translation: conversation.person2.translation,
+        });
+        await person1Item.save();
+        await person2Item.save();
+        conversationIds = {
+            person1: person1Item._id,
+            person2: person2Item._id
+        };
+        const updatedConversations = [
+            ...conversationDoc.conversations.slice(0, index + 1),
+            conversationIds,
+            ...conversationDoc.conversations.slice(index + 1)
+        ];
+        conversationDoc.conversations = updatedConversations;
+        await conversationDoc.save();
+
+        //get current conversation
+        const updatedConversation = await Conversation.findById(id).populate({
+            path: 'conversations.person1',
+            model: 'ConversationItem',
+        }).populate({
+            path: 'conversations.person2',
+            model: 'ConversationItem',
+        });
+
+        // return the current conversation item
+
+
+
+        return res.status(200).json({ conversation: updatedConversation.conversations[index + 1] })
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+
+
+
+
 }
 
 //remove material from lesson
@@ -549,7 +639,7 @@ const editGame = async (req, res) => {
         if (!quizToEdit) {
             return res.status(404).json({ message: 'Quiz not found' });
         }
-        if(name){
+        if (name) {
             quizToEdit.name = name;
         }
         // Get existing question IDs from the quiz
@@ -597,7 +687,7 @@ const editGame = async (req, res) => {
 const updateActivity = async (req, res, next) => {
     try {
         const id = req.params.id;
-        const { title, description } = req.body;
+        const { title } = req.body;
         //get coverImage
         const coverImage = req.file?.filename;
 
@@ -607,7 +697,7 @@ const updateActivity = async (req, res, next) => {
             return res.status(404).json({ message: 'Activity not found' });
         }
         activity.title = title;
-        activity.description = description;
+
         if (coverImage) {
             activity.coverImage = coverImage;
         }
@@ -627,7 +717,7 @@ const updateActivity = async (req, res, next) => {
 const updateActivitiesOrder = async (req, res) => {
     try {
         const { activities } = req.body;
-       
+
 
         // Generate update operations for each subject
         const updateOperations = activities.map(({ id, order }, index) => ({
@@ -651,10 +741,43 @@ const updateActivitiesOrder = async (req, res) => {
         return res.status(500).json({ message: 'Server error' });
     }
 };
+const updateGamesOrder = async (req, res) => {
+    try {
+        const { games } = req.body;
+
+
+        // Generate update operations for each subject
+        const updateOperations = games.map(({ id, order }, index) => ({
+            updateOne: {
+                filter: { _id: id },
+                update: { order: order }
+            }
+        }));
+
+
+        await Quiz.bulkWrite(updateOperations);
+        const updatedGames = await Quiz.find({ _id: { $in: games.map(game => game.id) } }).populate(
+            {
+                path: 'questions',
+                model: 'Question',
+                select: "question options answer"
+            }
+        );
+
+        // Check if games were found
+        if (!updatedGames) {
+            return res.status(404).json({ message: "Games not found" });
+        }
+        return res.status(200).json({ message: "Successfully updated games order", game: updatedGames });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ message: 'Server error' });
+    }
+};
 const updateLessonsOrder = async (req, res) => {
     try {
         const { lessons } = req.body;
-       
+
 
         // Generate update operations for each subject
         const updateOperations = lessons.map(({ id, order }, index) => ({
@@ -699,7 +822,7 @@ const deleteActivity = async (req, res, next) => {
 const updateLesson = async (req, res, next) => {
     try {
         const id = req.params.id;
-        const { title, description } = req.body;
+        const { title } = req.body;
         //get coverImage
         const coverImage = req.file?.filename;
 
@@ -709,7 +832,6 @@ const updateLesson = async (req, res, next) => {
             return res.status(404).json({ message: 'Lesson not found' });
         }
         lesson.title = title;
-        lesson.description = description;
         if (coverImage) {
             lesson.coverImage = coverImage;
         }
@@ -768,11 +890,11 @@ module.exports = {
     updateActivity,
     updateActivitiesOrder,
     updateLessonsOrder,
-
+    updateGamesOrder,
     deleteActivity,
     updateLesson,
     deleteLesson,
-    
+    addConversationBelow,
     uploadImage,
     audio
 

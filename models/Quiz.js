@@ -19,6 +19,10 @@ const quizSchema = new mongoose.Schema({
         type: Date,
         default: Date.now,
     },
+    order:{
+        type:Number,
+        default:0
+    },
 });
 const Quiz = mongoose.model('Quiz', quizSchema);
 module.exports = Quiz;

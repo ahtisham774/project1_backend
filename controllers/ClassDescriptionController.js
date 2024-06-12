@@ -153,7 +153,7 @@ exports.deleteClass = async (req, res) => {
     try {
         const student = req.params.id
         const { month, year, date, id } = req.body
-        console.log(month,year,date,id)
+        console.log(month, year, date, id)
         const level = await ClassDescription.findOne({ student })
         if (!level) {
             return res.status(404).json({ message: "Student Not found" })
@@ -177,4 +177,31 @@ exports.deleteClass = async (req, res) => {
     }
 
 
+}
+
+exports.updateClass = async (req, res) => {
+    try {
+        const student = req.params.id
+        const { month, year, date,topic, id } = req.body
+        const level = await ClassDescription.findOne({ student })
+        if (!level) {
+            return res.status(404).json({ message: "Student Not found" })
+        } else {
+            const checkMonth = level.classes.filter(data => data.month == month && data.year == year)
+            if (checkMonth.length > 0) {
+                let classData = checkMonth[0].class.find(item => item.date == date && item._id == id)
+                if (classData) {
+                    classData.topic = topic || classData.topic;
+                    await ClassDescription.updateOne({ student }, { classes: level.classes })
+                    return res.status(201).json({ message: "Class Updated" })
+                } else {
+                    return res.status(404).json({ message: "Class Not found" })
+                }
+            } else {
+                return res.status(404).json({ message: "Month and Year Not found" })
+            }
+        }
+    } catch (err) {
+        return res.status(500).json({ message: err.message })
+    }
 }

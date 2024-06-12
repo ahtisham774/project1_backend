@@ -9,7 +9,8 @@ exports.createReminder = async (req, res) => {
             reminder.reminders.push({
                 title,
                 dueDate,
-                isDone
+                isDone,
+                order:9999
             })
             await reminder.save()
             return res.status(200).json({ message: "Reminder Created" })

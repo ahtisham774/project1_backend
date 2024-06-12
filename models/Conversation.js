@@ -19,6 +19,10 @@ const ConversationSchema = new mongoose.Schema({
             },
         },
     ],
+    order:{
+        type:Number,
+        default:0
+    },
 });
 
 const Conversation = mongoose.model("Conversation", ConversationSchema);

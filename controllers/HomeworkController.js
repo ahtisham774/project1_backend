@@ -54,6 +54,27 @@ async function createHomework(req, res) {
         res.status(400).json({ message: err.message });
     }
 }
+async function createHomeworkSection(req, res) {
+    try {
+        const id = req.params.id
+        let activity = await HomeworkActivity.findById(id);
+        if (!activity) {
+            return res.status(404).json({ message: 'Activity not found' });
+        }
+        const homework = new Homework({
+            title: req.body.title,
+            link: req.body.link,
+            dueDate: req.body.dueDate,
+            isDone: req.body.isDone,
+        });
+        const hw = await homework.save();
+        activity.homeworks.push(hw._id)
+        await activity.save();
+        res.status(201).json({ message: "Successfully Created!!!" });
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+}
 
 
 async function createHomeworkLevel(req, res) {
@@ -128,6 +149,18 @@ async function getAllHomework(req, res) {
         res.status(500).json({ message: err.message });
     }
 }
+async function getAllHomeworkSections(req, res) {
+    let id = req.params.id
+    try {
+        const homework = await HomeworkActivity.findById(id).
+            select("homeworks").
+            populate('homeworks', { title: 1, link: 1, dueDate: 1, isDone: 1 })
+            ;
+        res.json(homework);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+}
 
 //update homework by ID
 async function updateHomework(req, res) {
@@ -154,11 +187,15 @@ async function updateHomework(req, res) {
         res.status(400).json({ message: err.message });
     }
 }
+
 // DELETE a homework
 async function deleteHomework(req, res) {
     let id = req.params.id
     try {
-        await Homework.findByIdAndRemove(id);
+        const homework = await Homework.findByIdAndDelete(id);
+        if (!homework) {
+            return res.status(404).json({ message: 'Homework not found' });
+        }
         res.json({ message: 'Homework deleted' });
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -167,7 +204,9 @@ async function deleteHomework(req, res) {
 
 module.exports = {
     createHomework,
+    createHomeworkSection,
     getAllHomework,
+    getAllHomeworkSections,
     createHomeworkLevel,
     createHomeworkActivities,
     getAllHomeworkLevels,
