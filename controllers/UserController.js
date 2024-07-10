@@ -108,10 +108,7 @@ exports.getStudentByLevel = async (req, res) => {
 exports.registerStudent = async (req, res) => {
     try {
         // Check if student already exists and rollNo already exist
-        const existingRollNo = await Student.findOne({ rollNo: req.body.rollNo });
-        if (existingRollNo) {
-            return res.status(400).json({ message: 'Roll No already exists' });
-        }
+       
         const existingStudent = await Student.findOne({ email: req.body.email });
         if (existingStudent) {
             return res.status(400).json({ message: 'Student already exists' });

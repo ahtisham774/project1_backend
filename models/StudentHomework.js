@@ -21,10 +21,23 @@ const StudentHomework = new mongoose.Schema({
                     },
                     link: {
                         type: String,
-                    }
-                    , dueDate: {
+                    },
+                    description: {
+                        type: String,
+                    },
+                    teacherDownload: {
+                        type: String,
+                    },
+                    studentDownload: {
+                        type: String,
+                    },
+                    status:{
+                        type: String,
+                        default: ""
+                    },
+                    dueDate: {
                         type: Date,
-                        default: Date.now()
+                        default: Date.now
                     },
                     isDone: {
                         type: Boolean,
@@ -33,6 +46,10 @@ const StudentHomework = new mongoose.Schema({
                     percentage: {
                         type: Number,
                         default: 0
+                    },
+                    date_created: {
+                        type: Date,
+                        default: Date.now
                     }
                 }]
         }

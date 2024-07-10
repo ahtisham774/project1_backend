@@ -17,6 +17,7 @@ var averageHomework = require("./routes/averageHomework")
 var studentHomework = require("./routes/studentHomework")
 var studentGoals = require("./routes/studentGoals")
 var classDescription = require("./routes/classDescription")
+var studentGrammarResult = require("./routes/studentGrammarResult")
 var reminder = require("./routes/reminder")
 
 const notesRoutes = require('./controllers/NoteController');
@@ -39,7 +40,7 @@ app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
-app.use('/api',express.static(path.join(__dirname, '/public')));
+app.use('/api', express.static(path.join(__dirname, '/public')));
 
 app.use('/', indexRouter);
 app.use('/api/auth/users', usersRouter);
@@ -50,6 +51,7 @@ app.use('/api/activity', activitiesRouter);
 app.use('/api/lesson', activitiesRouter);
 app.use('/api/conversation', activitiesRouter);
 app.use('/api/quiz', activitiesRouter);
+app.use('/api/grammar-result', studentGrammarResult);
 app.use('/api/classes', classRouter);
 app.use('/api/tracking', classRouter);
 app.use('/api/conversation-item', conversationRouter);
@@ -65,8 +67,8 @@ app.use('/api/payment', paymentRoutes);
 
 
 // catch 404 and forward to error handler
-app.use(function(req, res, next) {
-  next(createError(404));
+app.use(function (req, res, next) {
+    next(createError(404));
 });
 app.use(function (req, res, next) {
     res.setHeader(
@@ -84,14 +86,14 @@ app.use(function (req, res, next) {
     next(createError(404));
 });
 // error handler
-app.use(function(err, req, res, next) {
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
+app.use(function (err, req, res, next) {
+    // set locals, only providing error in development
+    res.locals.message = err.message;
+    res.locals.error = req.app.get('env') === 'development' ? err : {};
 
-  // render the error page
-  res.status(err.status || 500);
-  res.render('error');
+    // render the error page
+    res.status(err.status || 500);
+    res.render('error');
 });
 
 module.exports = app;

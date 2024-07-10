@@ -45,13 +45,14 @@ exports.getPaymentCards = async (req, res) => {
         // Calculate total number of classes, total completed classes, and total cancelled classes for each payment card
         const newPaymentCards = payments.payments.map((card, index) => {
             const totalClasses = card.classes.length;
-            const completedClasses = card.classes.filter(cl => cl.status === 'done').length;
-            const cancelledClasses = card.classes.filter(cl => cl.status === 'cancel').length;
+            const completedClasses = card.classes.filter(cl => cl.status === 'done').length || 0;
+            const cancelledClasses = card.classes.filter(cl => cl.status === 'cancel').length || 0;
+            const rescheduledClasses = card.classes.filter(cl => cl.status === 'reschedule').length || 0;
 
             if (card.classes.every(cl => cl.status !== 'await') && card.status === 'inprogress') {
                 card.status = 'pending'
             }
-            return { ...card.toObject(), name: `Payment # ${index + 1}`, totalClasses, completedClasses, cancelledClasses };
+            return { ...card.toObject(), name: `Payment # ${index + 1}`, totalClasses, completedClasses, cancelledClasses,rescheduledClasses };
         });
 
         res.status(200).json({
@@ -72,19 +73,29 @@ exports.createPaymentClass = async (req, res) => {
         const payment = await StudentPayment.findOne({ student })
         if (!payment) return res.status(404).json({ message: 'Payment not found' })
         let cls = payment.payments.find(cls => cls._id == paymentId)
+        let newClasses = [
+            {
+                status: 'await'
+            },
+            {
+                status: 'await'
+            },
+            {
+                status: 'await'
+            },
+            {
+                status: 'await'
+            },
+        ]
         if (!cls) {
             cls = payment.payments.push({
-                classes: [
-                    {
-                        status: 'await'
-                    }
-                ],
+                classes: newClasses,
                 status: 'inprogress'
             })
         }
+        newClasses.forEach(i => {
+            cls.classes.push(i)
 
-        cls.classes.push({
-            status: 'await'
         })
         await payment.save()
         res.status(201).json({ message: 'Payment Class Created' })

@@ -167,15 +167,17 @@ const createLessonGame = async (req, res) => {
         const name = req.body.name;
         const questions = req.body.questions;
         const type = req.body.gameType
+        const grammarType = req.body.grammarType
 
         // Create questions and get their IDs
         const questionIds = await Promise.all(questions.map(async q => {
-            const { question, options, correctOption } = q;
+            const { question,translation, options, answer } = q;
 
             const newQuestion = new Question({
                 question,
+                translation,
                 options,
-                answer: correctOption,
+                answer: answer,
             });
 
             const savedQuestion = await newQuestion.save();
@@ -191,7 +193,8 @@ const createLessonGame = async (req, res) => {
         const quiz = new Quiz({
             name,
             questions: questionIds,
-            type
+            type,
+            grammarType
 
         });
         const quizId = await quiz.save()
@@ -433,7 +436,7 @@ const updateConversation = async (req, res) => {
         if (title) {
             conversation.title = title;
         }
-    
+
         for (const con of conversations) {
             const person1Item = await ConversationItem.findById(con.person1._id)
             if (!person1Item) {
@@ -635,6 +638,8 @@ const editGame = async (req, res) => {
         const quizId = req.params.quizId;
         const updatedQuestions = req.body.questions;
         const name = req.body.name;
+        
+
         const quizToEdit = await Quiz.findById(quizId)
         if (!quizToEdit) {
             return res.status(404).json({ message: 'Quiz not found' });
@@ -642,6 +647,7 @@ const editGame = async (req, res) => {
         if (name) {
             quizToEdit.name = name;
         }
+    
         // Get existing question IDs from the quiz
         const existingQuestionIds = quizToEdit.questions;
 
@@ -654,17 +660,18 @@ const editGame = async (req, res) => {
                 // Update the existing question
                 await Question.findByIdAndUpdate(existingQuestionId, {
                     question: q.question,
+                    translation: q.translation,
                     options: q.options,
-                    answer: q.correctOption,
+                    answer: q.answer,
                 });
                 return existingQuestionId;
             } else {
                 // Create a new question
-                const { question, options, correctOption } = q;
+                const { question, options, answer } = q;
                 const newQuestion = new Question({
                     question,
                     options,
-                    answer: correctOption,
+                    answer: answer,
                 });
                 const savedQuestion = await newQuestion.save();
                 return savedQuestion._id;

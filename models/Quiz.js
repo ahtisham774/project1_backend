@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const quizSchema = new mongoose.Schema({
-    name:{
+    name: {
         type: String,
         required: true
     },
@@ -11,6 +11,10 @@ const quizSchema = new mongoose.Schema({
     type: {
         type: String,
     },
+    grammarType: {
+        type: String,
+
+    },
     createdAt: {
         type: Date,
         default: Date.now,
@@ -19,9 +23,9 @@ const quizSchema = new mongoose.Schema({
         type: Date,
         default: Date.now,
     },
-    order:{
-        type:Number,
-        default:0
+    order: {
+        type: Number,
+        default: 0
     },
 });
 const Quiz = mongoose.model('Quiz', quizSchema);
