@@ -89,8 +89,11 @@ exports.getHomeworks = async (req, res) => {
             return res.status(404).json({ message: "Student Not found" })
         }
         level.homeworks.forEach(hw => {
-            hw.homework.sort((a, b) => new Date(b.date_created) - new Date(a.date_created));
+            hw.homework.sort((a, b) => a.isDone - b.isDone)
+            // .sort((a, b) => new Date(b.date_created) - new Date(a.date_created))
+            ;
         })
+
         return res.status(200).json(level)
 
     } catch (err) {
