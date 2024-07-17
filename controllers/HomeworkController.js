@@ -76,6 +76,20 @@ async function createHomeworkSection(req, res) {
     }
 }
 
+const deleteHomeworkActivity = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const activity = await HomeworkActivity.findByIdAndDelete(id);
+        if (!activity) {
+            return res.status(404).json({ message: 'Activity not found' });
+        }
+        res.json({ message: 'Activity deleted' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+
+}
+
 
 async function createHomeworkLevel(req, res) {
 
@@ -211,6 +225,7 @@ module.exports = {
     createHomeworkActivities,
     getAllHomeworkLevels,
     getAllHomeworkActivities,
+    deleteHomeworkActivity,
     updateHomework,
     deleteHomework,
     getHomeworkById,

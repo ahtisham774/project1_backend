@@ -5,15 +5,29 @@ const questionSchema = new mongoose.Schema({
     question: {
         type: String,
     },
+    hint: {
+        type: String,
+    },
     options: {
         type: [String],
     },
+    image:{
+        type: String,
+    },
     translation: {
+        type: String,
+    },
+    translation2: {
         type: String,
     },
     answer: {
         type: String,
     },
+    optionals: [
+        {
+            type: String,
+        }
+    ],
     userAnswer: {
         type: String,
         default: ""

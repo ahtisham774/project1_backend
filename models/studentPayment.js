@@ -22,6 +22,10 @@ const StudentPaymentSchema = new mongoose.Schema({
                     status: {
                         type: String,
                         default: 'await',
+                    },
+                    hour:{
+                        type:String,
+                        default:'1 h'
                     }
                 }
             ],

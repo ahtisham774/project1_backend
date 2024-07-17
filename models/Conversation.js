@@ -4,6 +4,9 @@ const ConversationSchema = new mongoose.Schema({
     audio: {
         type: String,
     },
+    fastAudio: {
+        type: String,
+    },
     title: {
         type: String,
     },

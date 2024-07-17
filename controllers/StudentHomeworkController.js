@@ -2,7 +2,8 @@ const StudentHomework = require("../models/StudentHomework")
 
 exports.assignHomework = async (req, res) => {
     try {
-        const { month, year, title, link, description, dueDate, isDone, percentage } = req.body
+        const { month, year, title, link, description } = req.body
+        console.log(req.body)
         const student = req.params.id
         const level = await StudentHomework.findOne({ student })
         const document = req?.file ? req?.file?.filename : ""
@@ -19,10 +20,7 @@ exports.assignHomework = async (req, res) => {
                                 title,
                                 link,
                                 studentDownload: document,
-                                description,
-                                dueDate,
-                                isDone,
-                                percentage
+                                description
                             }
                         ]
                     }
@@ -47,9 +45,8 @@ exports.assignHomework = async (req, res) => {
                 checkMonth[0].homework.push({
                     title,
                     link,
-                    dueDate,
-                    isDone,
-                    percentage
+                    studentDownload: document,
+                    description
                 })
                 // }
                 await StudentHomework.updateOne({
@@ -65,6 +62,8 @@ exports.assignHomework = async (req, res) => {
                     homework: [{
                         title,
                         link,
+                        description,
+                        studentDownload: document,
                         dueDate,
                         isDone,
                         percentage
@@ -84,14 +83,14 @@ exports.getHomeworks = async (req, res) => {
     try {
         const student = req.params.id
         const level = await StudentHomework.findOne({ student })
-        console.log(level)
         if (!level) {
             return res.status(404).json({ message: "Student Not found" })
         }
         level.homeworks.forEach(hw => {
-            hw.homework.sort((a, b) => a.isDone - b.isDone)
-            // .sort((a, b) => new Date(b.date_created) - new Date(a.date_created))
-            ;
+            hw.homework
+                .sort((a, b) => new Date(b.date_created) - new Date(a.date_created))
+                .sort((a, b) => a.isDone - b.isDone)
+                ;
         })
 
         return res.status(200).json(level)

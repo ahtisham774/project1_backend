@@ -16,9 +16,9 @@ const lessonSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    order:{
-        type:Number,
-        default:0
+    order: {
+        type: Number,
+        default: 9999
     },
     materials: [
         {
@@ -34,6 +34,18 @@ const lessonSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Quiz'
     }],
+    reading: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Reading'
+        }
+    ],
+    imageQuiz: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'ImageQuiz'
+        }
+    ]
 
 })
 

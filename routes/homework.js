@@ -16,6 +16,7 @@ router.get('/activity/:id/homework/all', homeworkController.getAllHomework);
 router.get('/activity/:id/homework-section/all', homeworkController.getAllHomeworkSections);
 router.put('/:id/update', homeworkController.updateHomework);
 router.delete('/:id/delete', homeworkController.deleteHomework);
+router.delete('/activity/:id/', homeworkController.deleteHomeworkActivity);
 
 
 

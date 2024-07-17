@@ -85,7 +85,7 @@ const deleteConversationById = async (req, res) => {
     }
 };
 
-const audio = upload.single("audio")
+const audio = upload.array("audio")
 
 
 module.exports = {

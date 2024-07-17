@@ -45,14 +45,43 @@ exports.getPaymentCards = async (req, res) => {
         // Calculate total number of classes, total completed classes, and total cancelled classes for each payment card
         const newPaymentCards = payments.payments.map((card, index) => {
             const totalClasses = card.classes.length;
-            const completedClasses = card.classes.filter(cl => cl.status === 'done').length || 0;
-            const cancelledClasses = card.classes.filter(cl => cl.status === 'cancel').length || 0;
-            const rescheduledClasses = card.classes.filter(cl => cl.status === 'reschedule').length || 0;
+            const calculateTotalHours = (classes) => {
+                let totalMinutes = classes.reduce((sum, cl) => {
+                    const [hours, minutes] = cl.hour.split(' ').map((part, index) => {
+                        if (index === 0) return parseInt(part); // Assume the first part is hours
+                        if (index === 1) return parseInt(part); // Assume the second part is minutes
+                        return 0;
+                    });
+                    const total = (isNaN(hours) ? 0 : hours * 60) + (isNaN(minutes) ? 0 : minutes);
+                    return sum + total;
+                }, 0);
+
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+
+                return minutes == 0  ? `${hours}` : `${hours}.5`;
+            };
+
+            const completedClasses = card.classes.filter(cl => cl.status === 'done');
+            const cancelledClasses = card.classes.filter(cl => cl.status === 'cancel');
+            const rescheduledClasses = card.classes.filter(cl => cl.status === 'reschedule');
+
+            const completedClassesHours = calculateTotalHours(completedClasses);
+            const cancelledClassesHours = calculateTotalHours(cancelledClasses);
+            const rescheduledClassesHours = calculateTotalHours(rescheduledClasses);
+
 
             if (card.classes.every(cl => cl.status !== 'await') && card.status === 'inprogress') {
                 card.status = 'pending'
             }
-            return { ...card.toObject(), name: `Payment # ${index + 1}`, totalClasses, completedClasses, cancelledClasses,rescheduledClasses };
+            return {
+                ...card.toObject(),
+                name: `Payment # ${index + 1}`,
+                totalClasses,
+                completedClasses: completedClassesHours,
+                cancelledClasses: cancelledClassesHours,
+                rescheduledClasses: rescheduledClassesHours
+            };
         });
 
         res.status(200).json({
@@ -199,12 +228,17 @@ function isValidDate(d) {
 exports.updatePaymentClassDate = async (req, res) => {
     try {
         const { student } = req.params
-        const { paymentId, classId, date } = req.body
+        const { paymentId, classId, date, hour } = req.body
         const payment = await StudentPayment.findOne({ student })
         const card = payment.payments.find(card => card._id == paymentId)
         if (!card) return res.status(404).json({ message: 'Payment Card not found' })
         const cls = card.classes.find(cls => cls._id == classId)
-        cls.date = new Date(date)
+        if (hour) {
+            cls.hour = hour
+        }
+        if (date) {
+            cls.date = new Date(date)
+        }
         card.classes = card.classes.map(cl => cl._id == classId ? cls : cl)
         await payment.save()
         res.status(201).json({ message: 'Payment Class Date Updated' })

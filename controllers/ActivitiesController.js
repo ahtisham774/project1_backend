@@ -9,6 +9,9 @@ const Quiz = require("../models/Quiz")
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const Reading = require('../models/Reading');
+const { default: mongoose } = require('mongoose');
+const ImageQuiz = require('../models/ImageQuiz');
 
 
 // Set up multer storage for image upload
@@ -22,6 +25,24 @@ const storage = multer.diskStorage({
     }
 });
 
+const storage1 = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, './public/images/flashcards');
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+const storage2 = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, './public/images/imageQuiz');
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
 const audioStorage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, './public/audio');
@@ -35,19 +56,22 @@ const audioStorage = multer.diskStorage({
 const uploadAudio = multer({ storage: audioStorage });
 
 const upload = multer({ storage: storage });
+const uploadFlashCardsImages = multer({ storage: storage1 });
+const uploadFImage = uploadFlashCardsImages.array('image')
+const uploadImageQuiz = multer({ storage: storage2 }).array("image")
 // Middleware function to fetch a subject by ID and attach it to the request object
 const getAllActivities = async (req, res, next) => {
 
     try {
 
         const activities = await Subject.findById(req.params.id).select("activities")
-        console.log(activities)
+
         const data = await Activity.find(
             {
                 _id: { $in: activities.activities }
             }
         )
-        console.log(data)
+
         let subject = await Subject.findOne({ _id: req.params.id }).select("subject activities")
             .populate({
                 path: 'activities',
@@ -106,13 +130,106 @@ const getMaterialByLesson = async (req, res, next) => {
             lesson = await Lesson.findById(id).select("title order type materials")
         }
         else if (required === 'game') {
-            lesson = await Lesson.findById(id).select("title order type games").populate({
-                path: 'games',
-                populate: {
-                    path: 'questions',
-                    model: 'Question',
-                },
-            });
+            let test = await Lesson.findById(id).select("type")
+            console.log(test.type)
+            if (test.type == "Reading/Listening") {
+                lesson = await Lesson.aggregate([
+                    { $match: { _id: new mongoose.Types.ObjectId(id) } },
+                    {
+                        $lookup: {
+                            from: 'readings',
+                            localField: 'reading',
+                            foreignField: '_id',
+                            as: 'readingDetails'
+                        }
+                    },
+                    { $unwind: '$readingDetails' },  // Deconstructs the array to output a document for each element
+                    {
+                        $lookup: {
+                            from: 'quizzes',
+                            localField: 'readingDetails.readingGame',
+                            foreignField: '_id',
+                            as: 'readingGameDetails'
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: 'quizzes',
+                            localField: 'readingDetails.listeningGame',
+                            foreignField: '_id',
+                            as: 'listeningGameDetails'
+                        }
+                    },
+                    { $unwind: '$readingGameDetails' },
+                    { $unwind: '$listeningGameDetails' },
+                    {
+                        $lookup: {
+                            from: 'questions',
+                            localField: 'readingGameDetails.questions',
+                            foreignField: '_id',
+                            as: 'readingGameQuestions'
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: 'questions',
+                            localField: 'listeningGameDetails.questions',
+                            foreignField: '_id',
+                            as: 'listeningGameQuestions'
+                        }
+                    },
+                    {
+                        $addFields: {
+                            'readingDetails.readingGame': {
+                                $mergeObjects: ['$readingGameDetails', { questions: '$readingGameQuestions' }]
+                            },
+                            'readingDetails.listeningGame': {
+                                $mergeObjects: ['$listeningGameDetails', { questions: '$listeningGameQuestions' }]
+                            }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: '$_id',
+                            title: { $first: '$title' },
+                            order: { $first: '$order' },
+                            type: { $first: '$type' },
+                            games: { $push: '$readingDetails' }
+                        }
+                    },
+                    {
+                        $project: {
+                            _id: 1,
+                            title: 1,
+                            order: 1,
+                            type: 1,
+                            games: 1
+                        }
+                    }
+                ]);
+
+                lesson = lesson[0]
+
+
+
+            }
+            else if (test.type == "ImageQuiz") {
+                let data = await Lesson.findById(id).select("title order type imageQuiz").populate("imageQuiz")
+                let { imageQuiz, ...rest } = data.toObject();
+                lesson = {
+                    ...rest,
+                    games: imageQuiz
+                };
+            }
+            else {
+                lesson = await Lesson.findById(id).select("title order type games").populate({
+                    path: 'games',
+                    populate: {
+                        path: 'questions',
+                        model: 'Question',
+                    },
+                });
+            }
         }
 
         else if (required === 'conversation') {
@@ -130,7 +247,7 @@ const getMaterialByLesson = async (req, res, next) => {
             return res.status(404).json({ message: 'Lesson not found' });
         }
         return res.status(200).json(lesson)
-        next();
+
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Server error' });
@@ -159,72 +276,479 @@ const deleteConversation = async (req, res) => {
     }
 }
 
+// const createLessonGame = async (req, res) => {
+//     try {
+
+//         const id = req.params.id
+//         // Extract lesson data from the request body
+//         const name = req.body.name;
+//         const questions = req.body.questions;
+//         const type = req.body.gameType
+//         const grammarType = req.body.grammarType
+//         console.log(req.body)
+
+//         // Create questions and get their IDs
+//         // const questionIds = await Promise.all(questions.map(async q => {
+//         //     const { question, translation, options, answer, optionals } = q;
+
+//         //     const newQuestion = new Question({
+//         //         question,
+//         //         translation,
+//         //         options,
+//         //         optionals,
+//         //         answer,
+//         //     });
+
+//         //     const savedQuestion = await newQuestion.save();
+//         //     return savedQuestion._id;
+//         // }));
+
+//         // const lesson = await Lesson.findById(id)
+//         // if (!lesson) {
+//         //     return res.status(404).json({ message: 'Lesson not found' });
+//         // }
+
+
+//         // const quiz = new Quiz({
+//         //     name,
+//         //     questions: questionIds,
+//         //     type,
+//         //     grammarType
+
+//         // });
+//         // const quizId = await quiz.save()
+//         // //make lesson game array unique
+//         // const unique = [...new Set([...lesson.games, quizId._id])];
+//         // lesson.games = unique;
+//         // await lesson.save();
+//         // return res.status(200).json({ message: "Successfully added!!!" })
+
+//     } catch (error) {
+//         console.error('Error creating lesson:', error);
+//         res.status(500).json({ message: 'Internal Server Error' });
+//     }
+
+// }
 const createLessonGame = async (req, res) => {
     try {
+        const id = req.params.id;
+        const { name, gameType, grammarType } = req.body;
+        const questions = JSON.parse(req.body.questions); // Parse the questions from the string
 
-        const id = req.params.id
-        // Extract lesson data from the request body
-        const name = req.body.name;
-        const questions = req.body.questions;
-        const type = req.body.gameType
-        const grammarType = req.body.grammarType
-
-        // Create questions and get their IDs
-        const questionIds = await Promise.all(questions.map(async q => {
-            const { question,translation, options, answer } = q;
+        // Assuming you've set up a way to handle file uploads, e.g., using multer
+        const files = req.files;
+        let index = 0;
+        const questionIds = await Promise.all(questions.map(async (q) => {
+            const { question, translation, translation2, options, answer, optionals } = q;
 
             const newQuestion = new Question({
                 question,
                 translation,
+                translation2,
                 options,
-                answer: answer,
+                optionals,
+                answer,
             });
+
+            if (q.image) {
+                const imageFile = files[index] || null;
+
+                if (imageFile) {
+                    newQuestion.image = imageFile.filename; // Store the path to the image
+                    index += 1
+                }
+            }
 
             const savedQuestion = await newQuestion.save();
             return savedQuestion._id;
         }));
 
-        const lesson = await Lesson.findById(id)
+        const lesson = await Lesson.findById(id);
         if (!lesson) {
             return res.status(404).json({ message: 'Lesson not found' });
         }
 
-
         const quiz = new Quiz({
             name,
             questions: questionIds,
-            type,
+            type: gameType,
             grammarType
-
         });
-        const quizId = await quiz.save()
-        //make lesson game array unique
-        const unique = [...new Set([...lesson.games, quizId._id])];
-        lesson.games = unique;
+
+        const savedQuiz = await quiz.save();
+
+        // Make lesson game array unique
+        const uniqueGames = [...new Set([...lesson.games, savedQuiz._id])];
+        lesson.games = uniqueGames;
         await lesson.save();
-        return res.status(200).json({ message: "Successfully added!!!" })
+
+        return res.status(200).json({ message: "Successfully added!!!" });
 
     } catch (error) {
         console.error('Error creating lesson:', error);
         res.status(500).json({ message: 'Internal Server Error' });
     }
+};
+const editGame = async (req, res) => {
+    try {
+        const quizId = req.params.quizId;
+        const { name } = req.body;
 
+        const questions = JSON.parse(req.body.questions); // Parse the questions from the string
+
+        // Assuming you've set up a way to handle file uploads, e.g., using multer
+        const files = req.files;
+
+
+        const quizToEdit = await Quiz.findById(quizId)
+        if (!quizToEdit) {
+            return res.status(404).json({ message: 'Quiz not found' });
+        }
+        if (name) {
+            quizToEdit.name = name;
+        }
+
+        // Get existing question IDs from the quiz
+        const existingQuestionIds = quizToEdit.questions;
+        let index = 0;
+        // Process each updated question
+        const updatedQuestionIds = await Promise.all(questions.map(async (q) => {
+            // Check if q is already in existing questions
+            const existingQuestionId = existingQuestionIds.find(id => id == q._id);
+
+            if (existingQuestionId) {
+                // Update the existing question
+                const existingQuestion = await Question.findById(existingQuestionId)
+                // update the non empty field only 
+                if (q.question) existingQuestion.question = q.question;
+
+                if (q.options) existingQuestion.options = q.options;
+                if (q.optionals) existingQuestion.optionals = q.optionals;
+                if (q.translation) existingQuestion.translation = q.translation;
+                if (q.translation2) existingQuestion.translation2 = q.translation2;
+                if (q.answer) existingQuestion.answer = q.answer;
+                // also if image is updated then change the image of question also
+
+
+                if (q.image) {
+                    const imageFile = files[index] || null;
+
+                    if (imageFile) {
+                        existingQuestion.image = imageFile.filename; // Store the path to the image
+                        index += 1
+                    }
+                }
+
+                await existingQuestion.save();
+
+
+
+
+
+
+
+                return existingQuestionId;
+            } else {
+                // Create a new question
+                const { question, options, answer, optionals } = q;
+                const newQuestion = new Question({
+                    question,
+                    options,
+                    translation: q.translation,
+                    translation2: q.translation2,
+                    optionals,
+                    answer: answer,
+                });
+                if (q.image) {
+                    const imageFile = files[index] || null;
+                    if (imageFile) {
+                        newQuestion.image = imageFile.filename; // Store the path to the image
+                        index += 1;
+                    }
+                }
+                const savedQuestion = await newQuestion.save();
+                return savedQuestion._id;
+            }
+        }));
+
+
+
+
+        // Make the quiz's questions array unique
+        const unique = [...new Set([...existingQuestionIds, ...updatedQuestionIds])];
+        quizToEdit.questions = unique;
+        await quizToEdit.save();
+
+        res.status(200).json({ message: 'Questions successfully edited' });
+    } catch (error) {
+        console.error('Error editing questions:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+}
+const addReadingAndListening = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const { title, paragraph, type } = req.body;
+        const readingGames = JSON.parse(req.body.readingGames)
+        const listeningGames = JSON.parse(req.body.listeningGames)
+
+
+        const audio = req?.file?.filename;
+        const lesson = await Lesson.findById(id);
+        if (!lesson) {
+            return res.status(404).json({ message: 'Lesson not found' });
+        }
+
+        const questionIds = await Promise.all(readingGames.map(async q => {
+            const { question, translation, hint, options, answer } = q;
+            const newQuestion = new Question({
+                question,
+                translation,
+                hint,
+                options,
+                answer: answer,
+            });
+            const savedQuestion = await newQuestion.save();
+            return savedQuestion._id;
+        }));
+        const quiz = new Quiz({
+            name: "Reading",
+            questions: questionIds,
+            type,
+            grammarType: "options"
+        });
+        const readingID = await quiz.save();
+
+
+        const questionIds2 = await Promise.all(listeningGames.map(async q => {
+            const { question, translation, hint, options, answer } = q;
+            const newQuestion = new Question({
+                question,
+                translation,
+                hint,
+                options,
+                answer: answer,
+            });
+            const savedQuestion = await newQuestion.save();
+            return savedQuestion._id;
+        }));
+        const quiz2 = new Quiz({
+            name: "Listening",
+            questions: questionIds2,
+            type: "mcqs",
+            grammarType: "options"
+        });
+        const listeningID = await quiz2.save();
+
+
+        const reading = new Reading({
+            title,
+            paragraph,
+            audio,
+            readingGame: readingID._id,
+            listeningGame: listeningID._id
+        });
+        await reading.save()
+        lesson.reading.push(reading._id)
+        await lesson.save();
+        return res.status(200).json({ message: "Successfully added!!!" })
+    } catch (error) {
+        console.error('Error creating lesson:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+
+
+
+}
+const editReadingAndListening = async (req, res) => {
+    // update the non empty data only
+    try {
+        const id = req.params.id;
+        const { title, paragraph } = req.body;
+        const readingGames = JSON.parse(req.body.readingGames)
+        const listeningGames = JSON.parse(req.body.listeningGames)
+        const audio = req?.file?.filename;
+        const reading = await Reading.findById(id)
+        if (!reading) {
+            return res.status(404).json({ message: 'Reading not found' });
+        }
+        if (title) {
+            reading.title = title;
+        }
+        if (paragraph) {
+            reading.paragraph = paragraph;
+        }
+        if (audio) {
+            reading.audio = audio;
+        }
+
+        const existingReadingQuestion = await Quiz.findById(reading.readingGame);
+        const existingListeningQuestion = await Quiz.findById(reading.listeningGame);
+
+        const existingReadingQuestionIds = existingReadingQuestion.questions;
+
+        const existingListeningQuestionIds = existingListeningQuestion.questions;
+        const updatedReadingQuestionIds = await Promise.all(readingGames.map(async (q) => {
+            // Check if q is already in existing questions
+            const existingQuestionId = existingReadingQuestionIds.find(id => id == q._id);
+
+            if (existingQuestionId) {
+                // Update the existing question
+                const existingQuestion = await Question.findById(existingQuestionId)
+                // update the non empty field only 
+                if (q.question) existingQuestion.question = q.question;
+
+                if (q.options) existingQuestion.options = q.options;
+
+                if (q.translation) existingQuestion.translation = q.translation;
+                if (q.hint) existingQuestion.hint = q.hint;
+                if (q.answer) existingQuestion.answer = q.answer;
+
+                await existingQuestion.save();
+
+                return existingQuestionId;
+            } else {
+                // Create a new question
+                const { question, options, hint, answer } = q;
+                const newQuestion = new Question({
+                    question,
+                    options,
+                    hint,
+                    translation: q.translation,
+                    answer: answer,
+                });
+
+                const savedQuestion = await newQuestion.save();
+                return savedQuestion._id;
+            }
+        }));
+        const updatedListeningQuestionIds = await Promise.all(listeningGames.map(async (q) => {
+            // Check if q is already in existing questions
+            const existingQuestionId = existingListeningQuestionIds.find(id => id == q._id);
+
+            if (existingQuestionId) {
+                // Update the existing question
+                const existingQuestion = await Question.findById(existingQuestionId)
+                // update the non empty field only 
+                if (q.question) existingQuestion.question = q.question;
+
+                if (q.options) existingQuestion.options = q.options;
+
+                if (q.translation) existingQuestion.translation = q.translation;
+                if (q.hint) existingQuestion.hint = q.hint;
+                if (q.answer) existingQuestion.answer = q.answer;
+
+                await existingQuestion.save();
+
+                return existingQuestionId;
+            } else {
+                // Create a new question
+                const { question, options, hint, answer } = q;
+                const newQuestion = new Question({
+                    question,
+                    options,
+                    hint,
+                    translation: q.translation,
+                    answer: answer,
+                });
+
+                const savedQuestion = await newQuestion.save();
+                return savedQuestion._id;
+            }
+        }));
+
+        const uniqueReadingQuestions = [...new Set([...existingReadingQuestionIds, ...updatedReadingQuestionIds])];
+        existingReadingQuestion.questions = uniqueReadingQuestions
+        await existingReadingQuestion.save();
+        reading.readingGame = existingReadingQuestion._id;
+
+        const uniqueListeningQuestions = [...new Set([...existingListeningQuestionIds, ...updatedListeningQuestionIds])];
+        existingListeningQuestion.questions = uniqueListeningQuestions
+        await existingListeningQuestion.save();
+
+        reading.listeningGame = existingListeningQuestion._id;
+
+
+        await reading.save()
+        return res.status(200).json({ message: "Successfully added!!!" })
+    } catch (error) {
+        console.error('Error creating lesson:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+
+    }
+
+
+}
+
+
+const addImageQuiz = async (req, res) => {
+    try {
+        const id = req.params.id
+        const { title } = req.body
+        const gamesData = JSON.parse(req.body.games)
+
+        const files = req.files
+        const lesson = await Lesson.findById(id)
+        if (!lesson) {
+            return res.status(404).json({ message: 'Lesson not found' });
+        }
+        let index = 0;
+
+        const games = await Promise.all(gamesData.map(async q => {
+            const { questions } = q;
+            const imageFile = files[index] || null;
+            index += 1;
+            return ({
+                image: imageFile.filename,
+                questions
+            })
+        }
+        )
+
+        )
+        const imageQuiz = new ImageQuiz({
+            title,
+            games
+        })
+
+        await imageQuiz.save()
+        lesson.imageQuiz = imageQuiz._id
+        await lesson.save()
+        return res.status(200).json({ message: "Successfully added!!!" })
+
+
+    }
+    catch (error) {
+        console.error('Error creating lesson:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
 }
 
 const deleteLessonGame = async (req, res) => {
     try {
         const lessonId = req.params.id;
         const gameId = req.query.gameId;
-        console.log(lessonId)
-        console.log(gameId)
+        const gameType = req.query.gameType;
+        let gameToDelete = {
+            games: gameId
+        }
+        if (gameType == "Reading/Listening") {
+            gameToDelete = {
+                reading: gameId
+            }
+        }
         const updateLesson = await Lesson.updateOne({
             _id: lessonId
         }, {
-            $pull: {
-                games: gameId
-            }
+            $pull: gameToDelete
+
         });
-        console.log(updateLesson)
+        if (updateLesson.modifiedCount === 0) {
+
+            return res.status(404).json({ message: 'Game not found or not modified' });
+
+        }
+
         return res.status(200).json({ message: "Successfully deleted!!!" })
     } catch (err) {
         console.error('Error deleting game:', err);
@@ -237,16 +761,28 @@ const updateConversationAudio = async (req, res) => {
     try {
         const id = req.params.id;
         //get coverImage
-        const audio = req.file.filename;
+        const files = req.files;
+
 
         // Find the subject by ID
         const conversation = await Conversation.findById(id);
         if (!conversation) {
             return res.status(404).json({ message: 'Conversation not found' });
         }
-        conversation.audio = audio;
+        if (files[0]) {
+
+            conversation.audio = files[0].filename;
+        }
+        if (files[1]) {
+            conversation.fastAudio = files[1].filename;
+
+        }
         await conversation.save();
-        return res.status(200).json({ message: "Successfully added!!!" })
+        return res.status(200).json({
+            message: "Successfully added!!!",
+            audio: conversation.audio,
+            fastAudio: conversation.fastAudio
+        })
 
     }
     catch (error) {
@@ -362,7 +898,9 @@ const createConversation = async (req, res) => {
     try {
         const id = req.params.id;
         const title = req.body.title, conversation = JSON.parse(req.body.conversation);
-        const audio = req.file.filename;
+        const files = req.files
+        const audio = files[0].filename
+        const fastAudio = files[1].filename
 
 
         const lesson = await Lesson.findById(id);
@@ -403,6 +941,7 @@ const createConversation = async (req, res) => {
 
         const newConversation = new Conversation({
             audio,
+            fastAudio,
             title,
             conversations: conversationIds,
         });
@@ -423,15 +962,18 @@ const updateConversation = async (req, res) => {
         const id = req.params.id;
         const { title } = req.body;
         const conversations = JSON.parse(req.body.conversations)
-
+        const files = req.files
 
 
         const conversation = await Conversation.findById(id);
         if (!conversation) {
             return res.status(404).json({ message: 'Conversation not found' });
         }
-        if (req.file) {
-            conversation.audio = req.file.filename;
+        if (files[0]) {
+            conversation.audio = files[0].filename;
+        }
+        if (files[1]) {
+            conversation.fastAudio = files[1].filename;
         }
         if (title) {
             conversation.title = title;
@@ -633,62 +1175,7 @@ const deleteQuestion = async (req, res) => {
     }
 };
 
-const editGame = async (req, res) => {
-    try {
-        const quizId = req.params.quizId;
-        const updatedQuestions = req.body.questions;
-        const name = req.body.name;
-        
 
-        const quizToEdit = await Quiz.findById(quizId)
-        if (!quizToEdit) {
-            return res.status(404).json({ message: 'Quiz not found' });
-        }
-        if (name) {
-            quizToEdit.name = name;
-        }
-    
-        // Get existing question IDs from the quiz
-        const existingQuestionIds = quizToEdit.questions;
-
-        // Process each updated question
-        const updatedQuestionIds = await Promise.all(updatedQuestions.map(async q => {
-            // Check if q is already in existing questions
-            const existingQuestionId = existingQuestionIds.find(id => id == q._id);
-
-            if (existingQuestionId) {
-                // Update the existing question
-                await Question.findByIdAndUpdate(existingQuestionId, {
-                    question: q.question,
-                    translation: q.translation,
-                    options: q.options,
-                    answer: q.answer,
-                });
-                return existingQuestionId;
-            } else {
-                // Create a new question
-                const { question, options, answer } = q;
-                const newQuestion = new Question({
-                    question,
-                    options,
-                    answer: answer,
-                });
-                const savedQuestion = await newQuestion.save();
-                return savedQuestion._id;
-            }
-        }));
-
-        // Make the quiz's questions array unique
-        const unique = [...new Set([...existingQuestionIds, ...updatedQuestionIds])];
-        quizToEdit.questions = unique;
-        await quizToEdit.save();
-
-        res.status(200).json({ message: 'Questions successfully edited' });
-    } catch (error) {
-        console.error('Error editing questions:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
-    }
-}
 
 //update Activity
 const updateActivity = async (req, res, next) => {
@@ -872,8 +1359,9 @@ const deleteLesson = async (req, res, next) => {
 module.exports = { editGame };
 
 
-uploadImage = upload.single('coverImage');
-audio = uploadAudio.single("audio")
+let uploadImage = upload.single('coverImage');
+let audio = uploadAudio.single("audio")
+let conversationAudio = uploadAudio.array("audio")
 
 
 module.exports = {
@@ -890,7 +1378,9 @@ module.exports = {
     updateConversation,
     deleteQuestion,
     addMaterial,
-
+    addReadingAndListening,
+    editReadingAndListening,
+    addImageQuiz,
     addLesson,
     removeMaterial,
     getMaterialByLesson,
@@ -903,6 +1393,9 @@ module.exports = {
     deleteLesson,
     addConversationBelow,
     uploadImage,
-    audio
+    audio,
+    uploadFImage,
+    uploadImageQuiz,
+    conversationAudio
 
 };
