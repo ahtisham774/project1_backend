@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 const StudentPaymentSchema = new mongoose.Schema({
     student: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Student'
+        ref: 'Student',
+        index:true
     },
     cancelClasses: {
         type: Number,

@@ -16,13 +16,37 @@ const subjectSchema =new  mongoose.Schema({
     activities:[
         {
             type:mongoose.Schema.Types.ObjectId,
-            ref:'Activity'
+            ref:'Activity',
+            index:true
         }
     ],
     isAvailable:{
         type:Boolean,
         default:false
-    }
+    },
+    progress: [
+        {
+            studentId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Student',
+                index:true
+            },
+            status: {
+                type: String,
+                default: "Not Started"
+            },
+            progress: {
+                type: Number,
+                default: 0
+            }
+            ,
+            avg: {
+                type: Number,
+                default: 0
+            }
+
+        }
+    ]
 
 })
 const Subject = mongoose.model('Subject',subjectSchema)

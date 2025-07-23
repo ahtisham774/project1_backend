@@ -1,90 +1,319 @@
-#!/usr/bin/env node
+const app = require('../app')
+const debug = require('debug')('backend:server')
+const http = require('http')
+const socketIO = require('socket.io')
+const Message = require('../models/Message')
+const Room = require('../models/Room')
+const Student = require('../models/Student')
 
-/**
- * Module dependencies.
- */
+const port = normalizePort(process.env.PORT || '8000')
+app.set('port', port)
 
-var app = require('../app');
-var debug = require('debug')('backend:server');
-var http = require('http');
+const server = http.createServer(app)
+server.listen(port)
+server.on('error', onError)
+server.on('listening', onListening)
 
-/**
- * Get port from environment and store in Express.
- */
+const io = socketIO(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  },
+  pingTimeout: 60000 // Increase timeout to 60 seconds
+})
 
-var port = normalizePort(process.env.PORT || '8000');
-app.set('port', port);
+// Track connected users
+const connectedUsers = new Map()
 
-/**
- * Create HTTP server.
- */
+io.on('connection', socket => {
+  console.log('New user connected', socket.id)
 
-var server = http.createServer(app);
+  // Store user information when they connect
+  socket.on('authenticate', userId => {
+    connectedUsers.set(socket.id, userId)
+    console.log(`User ${userId} authenticated with socket ${socket.id}`)
+  })
+  socket.on('authenticate-teacher', teacherId => {
+    connectedUsers.set(socket.id, { userId: teacherId, type: 'teacher' })
+   
+  })
+  socket.on('request-student-list', async teacherId => {
+    try {
+      const students = await getStudentsWithUnreads(teacherId)
 
-/**
- * Listen on provided port, on all network interfaces.
- */
+      socket.emit('student-list-update', students)
+    } catch (error) {
+      console.error('Error fetching student list:', error)
+    }
+  })
+  socket.on('join-teacher-room', teacherId => {
+    socket.join(`teacher-${teacherId}`)
+    console.log(`Teacher ${teacherId} joined their notification room`)
+  })
 
-server.listen(port);
-server.on('error', onError);
-server.on('listening', onListening);
+  socket.on('joinRoom', async roomId => {
+    try {
+      socket.join(roomId)
 
-/**
- * Normalize a port into a number, string, or false.
- */
+      // Create room if it doesn't exist
+      const room = await Room.findOneAndUpdate(
+        { roomId },
+        {},
+        { upsert: true, new: true }
+      )
 
-function normalizePort(val) {
-  var port = parseInt(val, 10);
+      console.log(`User ${socket.id} joined room ${roomId}`)
+    } catch (error) {
+      console.error('Error joining room:', error)
+    }
+  })
 
-  if (isNaN(port)) {
-    // named pipe
-    return val;
-  }
+  socket.on('disconnect', () => {
+    const userId = connectedUsers.get(socket.id)
+    console.log(`User ${userId} disconnected`)
+    connectedUsers.delete(socket.id)
+  })
 
-  if (port >= 0) {
-    // port number
-    return port;
-  }
+  socket.on('mark-messages-read', async ({ roomId, userId }) => {
+    try {
+      // Find the room and populate its messages
+      const room = await Room.findOne({ roomId }).populate('messages')
 
-  return false;
+      if (!room) {
+        console.log(`Room ${roomId} not found`)
+        return
+      }
+
+      // Filter messages where:
+      // - The message is sent to the current user (to === userId)
+      // - The message is not already read (isRead === false)
+      const messagesToUpdate = room.messages.filter(
+        message => message.to === userId && !message.isRead
+      )
+
+      // Get the message IDs to update
+      const messageIds = messagesToUpdate.map(msg => msg._id)
+
+      // Bulk update all matching messages to mark them as read
+      await Message.updateMany(
+        { _id: { $in: messageIds } },
+        { $set: { isRead: true } }
+      )
+
+      // Emit event to all clients in the room
+      io.to(roomId).emit('messages-read', {
+        roomId,
+        userId,
+        messageIds, // Include which messages were marked read
+        timestamp: new Date()
+      })
+      const students = await getStudentsWithUnreads(userId)
+      io.to(`teacher-${userId}`).emit('student-list-update', students)
+    } catch (error) {
+      console.error('Error marking messages as read:', error)
+    }
+  })
+
+  socket.on('message', async messageData => {
+ 
+
+    try {
+      if (!messageData.from || !messageData.to) {
+        throw new Error('Missing sender or recipient')
+      }
+
+      const newMessage = new Message({
+        text: messageData.text,
+        from: messageData.from,
+        to: messageData.to,
+        roomId: messageData.roomId, // Using recipient ID as roomId
+        imageUrl: messageData.imageUrl,
+        fileUrl: messageData.fileUrl,
+        fileName: messageData.fileName,
+        fileType: messageData.fileType,
+        fileSize: messageData.fileSize,
+        isRead: false
+      })
+
+      await newMessage.save()
+
+      // Add message to the room
+      await Room.findOneAndUpdate(
+        { roomId: messageData.roomId },
+        { $push: { messages: newMessage._id } },
+        { upsert: true }
+      )
+     
+      // Emit to both sender and recipient
+      io.emit('new-message', newMessage)
+
+      // Send notification if recipient is not in the chat
+      const recipientSocket = [...connectedUsers.entries()].find(
+        ([_, userId]) => userId === messageData.to
+      )
+
+      if (!recipientSocket || !socket.rooms.has(messageData.to)) {
+        io.to(messageData.to).emit('new-message-notification', {
+          from: messageData.from,
+          message: messageData.text
+            ? messageData.text.substring(0, 50)
+            : messageData.imageUrl
+            ? 'Image sent'
+            : 'File sent'
+        })
+      }
+      const students = await getStudentsWithUnreads(messageData.to)
+      io.to(`teacher-${messageData.to}`).emit('student-list-update', students)
+    } catch (error) {
+      console.error('Error handling message:', error)
+      socket.emit('message-error', { error: error.message })
+    }
+  })
+
+  // Typing indicators
+  socket.on('typing', ({ roomId, userId, userName }) => {
+    console.log(
+      `User ${userId} is typing in room ${roomId} with name ${userName}`
+    )
+    io.to(roomId).emit('user-typing', { userId, userName })
+  })
+
+  socket.on('stop-typing', ({ roomId, userId }) => {
+    console.log(`User ${userId} stopped typing in room ${roomId}`)
+    io.to(roomId).emit('user-stopped-typing', { userId })
+  })
+})
+async function getStudentsWithUnreads (teacherId) {
+  return await Student.aggregate([
+    // Match only active students (optional filter)
+    {
+      $match: {
+        status: 'active'
+      }
+    },
+    // Lookup to join with rooms
+    {
+      $lookup: {
+        from: 'rooms',
+        let: { studentId: { $toString: '$_id' } },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ['$roomId', { $concat: [teacherId, '$$studentId'] }]
+              }
+            }
+          },
+          {
+            $lookup: {
+              from: 'messages',
+              localField: 'messages',
+              foreignField: '_id',
+              as: 'messages',
+              pipeline: [
+                {
+                  $sort: { timestamp: -1 } // Sort messages by newest first
+                }
+              ]
+            }
+          },
+          {
+            $project: {
+              lastMessage: { $arrayElemAt: ['$messages', 0] }, // Get most recent message
+              unreadCount: {
+                $size: {
+                  $filter: {
+                    input: '$messages',
+                    as: 'msg',
+                    cond: {
+                      $and: [
+                        { $eq: ['$$msg.to', teacherId] },
+                        { $eq: ['$$msg.isRead', false] }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        as: 'roomData'
+      }
+    },
+    // Unwind the roomData array (since lookup returns an array)
+    {
+      $unwind: {
+        path: '$roomData',
+        preserveNullAndEmptyArrays: true // Include students with no messages
+      }
+    },
+    // Add fields for easier access
+    {
+      $addFields: {
+        unreadCount: { $ifNull: ['$roomData.unreadCount', 0] },
+        lastMessageTime: { $ifNull: ['$roomData.lastMessage.timestamp', null] },
+        lastMessageText: { $ifNull: ['$roomData.lastMessage.text', null] },
+        roomId: { $concat: [teacherId, { $toString: '$_id' }] }
+      }
+    },
+    // Project only the fields we need
+    {
+      $project: {
+        _id: 1,
+        firstName: 1,
+        lastName: 1,
+        profileImage: 1,
+        status: 1,
+        unreadCount: 1,
+        lastMessageTime: 1,
+        lastMessageText: 1,
+        roomId: 1
+      }
+    },
+    // Sort by:
+    // 1. Students with unread messages first
+    // 2. Then by most recent message time
+    // 3. Then alphabetically by name
+    {
+      $sort: {
+        unreadCount: -1,
+        lastMessageTime: -1,
+        firstName: 1,
+        lastName: 1
+      }
+    }
+  ])
+}
+// Helper functions
+function normalizePort (val) {
+  const port = parseInt(val, 10)
+  if (isNaN(port)) return val
+  if (port >= 0) return port
+  return false
 }
 
-/**
- * Event listener for HTTP server "error" event.
- */
+function onError (error) {
+  if (error.syscall !== 'listen') throw error
 
-function onError(error) {
-  if (error.syscall !== 'listen') {
-    throw error;
-  }
+  const bind = typeof port === 'string' ? 'Pipe ' + port : 'Port ' + port
 
-  var bind = typeof port === 'string'
-    ? 'Pipe ' + port
-    : 'Port ' + port;
-
-  // handle specific listen errors with friendly messages
   switch (error.code) {
     case 'EACCES':
-      console.error(bind + ' requires elevated privileges');
-      process.exit(1);
-      break;
+      console.error(bind + ' requires elevated privileges')
+      process.exit(1)
+      break
     case 'EADDRINUSE':
-      console.error(bind + ' is already in use');
-      process.exit(1);
-      break;
+      console.error(bind + ' is already in use')
+      process.exit(1)
+      break
     default:
-      throw error;
+      throw error
   }
 }
 
-/**
- * Event listener for HTTP server "listening" event.
- */
-
-function onListening() {
-  var addr = server.address();
-  var bind = typeof addr === 'string'
-    ? 'pipe ' + addr
-    : 'port ' + addr.port;
-  debug('Listening on ' + bind);
+function onListening () {
+  const addr = server.address()
+  const bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port
+  debug('Listening on ' + bind)
+  console.log(`Server running on port ${port}`)
 }

@@ -4,9 +4,13 @@ const quizSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    explanation: {
+        type: String,
+    },
     questions: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Question'
+        ref: 'Question',
+        index:true
     }],
     type: {
         type: String,
@@ -27,6 +31,28 @@ const quizSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    progress: [
+        {
+            studentId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Student',
+                index:true
+            },
+            status: {
+                type: String,
+                default: "Not Started"
+            },
+            progress: {
+                type: Number,
+                default: 0
+            },
+            avg: {
+                type: Number,
+                default: 0
+            }
+
+        }
+    ]
 });
 const Quiz = mongoose.model('Quiz', quizSchema);
 module.exports = Quiz;

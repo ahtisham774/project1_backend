@@ -3,7 +3,8 @@ const mongoose = require("mongoose")
 const StudentLevel = new mongoose.Schema({
     student: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Student'
+        ref: 'Student',
+        index:true
     },
     grammar: {
         type: String,

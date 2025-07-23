@@ -27,25 +27,53 @@ const lessonSchema = new mongoose.Schema({
     ],
     conversation: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Conversation'
+        ref: 'Conversation',
+        index:true
 
     },
     games: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Quiz'
+        ref: 'Quiz',
+        index:true
     }],
     reading: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'Reading'
+            ref: 'Reading',
+            index:true
         }
     ],
     imageQuiz: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'ImageQuiz'
+            ref: 'ImageQuiz',
+            index:true
+        }
+    ],
+    progress: [
+        {
+            studentId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Student',
+                index:true
+            },
+            status: {
+                type: String,
+                default: "Not Started"
+            },
+            progress: {
+                type: Number,
+                default: 0
+            },
+            avg: {
+                type: Number,
+                default: 0
+            }
+
+
         }
     ]
+
 
 })
 

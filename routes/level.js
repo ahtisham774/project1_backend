@@ -9,9 +9,10 @@ const levelController = require('../controllers/LevelController');
 router.get('/all', levelController.getAllLevel);
 router.put('/:id/update-name', levelController.updateLevelName);
 router.post('/create', levelController.createLevel);
-router.get('/:id/subject/all', levelController.getLevelById);
+router.post('/:id/subject/all', levelController.getLevelById);
 router.post("/update-subject-orders",levelController.updateSubjectsOrder)
 router.post('/:id/subject/create', levelController.uploadImage,levelController.updateLevelById);
 router.delete('/:id', levelController.deleteLevelById);
+router.put('/update-level-orders', levelController.updateLevelsOrder);
 
 module.exports = router;

@@ -3,7 +3,8 @@ const bcrypt = require('bcrypt');
 const multer = require('multer');
 const path = require('path');
 const Student = require('../models/Student');
-const Teacher = require("../models/Teacher")
+const Teacher = require("../models/Teacher");
+const mongoose = require('mongoose');
 
 
 // Set up multer storage for image upload
@@ -65,11 +66,27 @@ exports.assignLevel = async (req, res) => {
         const levelID = req.body.levelID;
         const students = JSON.parse(req.body.students);
 
-        console.log(levelID, students);
 
         await Student.updateMany(
             { _id: { $in: students }, levels: { $ne: levelID } },
             { $addToSet: { levels: levelID } }
+        );
+
+        res.status(200).json({ message: 'Level assigned' });
+    } catch (error) {
+        console.log(error);
+        res.status(400).json({ message: 'Invalid credentials' });
+    }
+};
+exports.assignUseOfEnglish = async (req, res) => {
+    try {
+        const id = req.body.id;
+        const students = JSON.parse(req.body.students);
+
+
+        await Student.updateMany(
+            { _id: { $in: students }, useOfEnglish: { $ne: id } },
+            { $addToSet: { useOfEnglish: id } }
         );
 
         res.status(200).json({ message: 'Level assigned' });
@@ -90,6 +107,27 @@ exports.getStudentLevels = async (req, res) => {
         res.status(400).json({ message: 'Invalid credentials' });
     }
 }
+exports.getStudentUseOfEnglish = async (req, res) => {
+    try {
+        const student = await Student.findById(req.params.id).select('useOfEnglish').
+            populate({
+                path: 'useOfEnglish',
+                populate: {
+                    path: 'games',
+                    populate: {
+                        path: 'questions',
+                        model: "Question"
+                    }
+                }
+            })
+            ;
+        res.status(200).json(student.useOfEnglish);
+    }
+    catch (error) {
+        console.log(error)
+        res.status(400).json({ message: 'Invalid credentials' });
+    }
+}
 
 exports.getStudentByLevel = async (req, res) => {
     try {
@@ -103,12 +141,26 @@ exports.getStudentByLevel = async (req, res) => {
 
 }
 
+exports.getStudentByUseOfEnglish = async (req, res) => {
+    try {
+        const students = await Student.find({ useOfEnglish: req.params.id }).select('firstName lastName profileImage');
+        res.status(200).json(students);
+    }
+    catch (error) {
+        console.log(error)
+        res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+}
+
+
+
 
 // Register a new student
 exports.registerStudent = async (req, res) => {
     try {
         // Check if student already exists and rollNo already exist
-       
+
         const existingStudent = await Student.findOne({ email: req.body.email });
         if (existingStudent) {
             return res.status(400).json({ message: 'Student already exists' });
@@ -127,6 +179,7 @@ exports.registerStudent = async (req, res) => {
             firstName: req.body.firstName,
             lastName: req.body.lastName,
             email: req.body.email,
+
             password: hashedPassword,
             profileImage: req.file ? (req.file.filename ? req.file.filename : "") : ""
         });
@@ -172,6 +225,22 @@ exports.loginStudent = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+exports.loginWithGoogle = async (req, res) => {
+    let user;
+    if (req.body.userType === "teacher") {
+        user = await Teacher.findOne({ email: req.body.email });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        res.status(200).json({ "email": req.body.email, "userType": req.body.userType });
+    }
+    else {
+        return res.status(405).josn({ message: "Student is not allowed" })
+
+    }
+};
+
 
 // Get student details
 exports.getStudentDetails = async (req, res) => {
@@ -271,6 +340,138 @@ exports.getCurrentUser = async (req, res) => {
 };
 
 
+exports.getCurrentLevelProgress = async (req, res) => {
+    try {
+        const student = req.params.id
+        console.log()
+        const level = await Student.findById(student).select("levels").populate({
+            path: "levels",
+            select: "progress"
+        })
+        if (!level) return res.status(404).json({ message: "Student Not found" })
+        return res.status(200).json({ progress: level.levels[level.levels.length - 1]?.progress?.find(p => p.studentId == student)?.progress })
+    } catch (err) {
+        return res.status(500).json({ message: err.message })
+    }
+}
+
+
+exports.getStudentCurrentSubject = async (req, res) => {
+    try {
+        const studentId = req.params.id;
+
+        // Fetch the student levels with subjects and progress
+        const student = await Student.findById(studentId)
+            .select("levels")
+            .populate({
+                path: "levels",
+                populate: {
+                    path: "subjects",
+                    model: "Subject",
+                    select: "subject progress activities",
+
+                    populate: {
+                        path: "activities",
+                        model: "Activity",
+                        select: "progress",
+
+                    }
+
+                }
+            });
+
+        if (!student) {
+            return res.status(404).json({ message: "Student Not found" });
+        }
+
+        const levels = student.levels;
+        let currentSubject = null;
+
+        // Iterate through levels to find the current subject
+        for (let i = levels.length - 1; i >= 0; i--) {
+            const subjects = levels[i].subjects;
+            for (let subject of subjects) {
+                const studentProgress = subject.progress.find(p => p.studentId && p.studentId == studentId);
+                if (studentProgress) {
+                    if (studentProgress.status !== "Completed") {
+                        currentSubject = {
+                            subject: subject.subject,
+                            status: studentProgress.status,
+                            progress: studentProgress.progress,
+                            totalActivitiesCompleted:
+                                subject.activities.filter(activity => activity.progress.find(p => p.studentId == studentId && p.status === "Completed")).length,
+                            totalActivities:
+                                subject.activities.length
+
+                        };
+
+                        break;
+                    }
+                } else {
+                    // If no progress is found for this student, it's the current subject
+                    currentSubject = {
+                        subject: subject.subject,
+                        status: "Not Started",
+                        progress: 0,
+                        totalActivitiesCompleted: 0,
+                        totalActivities: subject.activities.length
+                    };
+                    break;
+                }
+            }
+            if (currentSubject) break;
+        }
+
+        return res.status(200).json({ currentSubject });
+
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
+};
+
+
+exports.getSubjectsCompleted = async (req, res) => {
+    try {
+        const studentId = req.params.id;
+        const student = await Student.findById(studentId)
+            .select("levels")
+            .populate({
+                path: "levels",
+                populate: {
+                    path: "subjects",
+                    model: "Subject",
+                    select: {
+                        subject: 1,
+                        progress: { $elemMatch: { studentId: studentId } }
+
+                    }
+                }
+            });
+        if (!student) return res.status(404).json({ message: "Student Not found" });
+        const levels = student.levels;
+        let subjectsCompleted = 0;
+        let totalSubjects = 0;
+        for (let level of levels) {
+            totalSubjects += level.subjects.length;
+            for (let subject of level.subjects) {
+                const studentProgress = subject.progress.find(p => p.studentId && p.studentId.toString() === studentId);
+                if (studentProgress && studentProgress.status === "Completed") {
+                    subjectsCompleted++;
+                }
+            }
+        }
+        return res.status(200).json({
+            subjectsCompleted,
+            totalSubjects
+        });
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
+};
+
+
+
+
 
 exports.registerTeacher = async (req, res) => {
     try {
@@ -318,6 +519,31 @@ exports.getStudentName = async (req, res) => {
     catch (error) {
         console.log(error)
         res.status(400).json({ message: 'Invalid credentials' });
+    }
+}
+
+
+
+exports.getAllStudentsWithNames = async (req, res) => {
+    try {
+        const students = await Student.find().select('firstName lastName profileImage');
+        res.status(200).json(students);
+    }
+    catch (error) {
+        console.log(error)
+        res.status(400).json({ message: 'Invalid credentials' });
+    }
+}
+
+exports.getMyTeacher = async (req, res) => {
+    try {
+        const id = req.params.id
+        const teacher = await Teacher.findById(id).select("firstName lastName profileImage")
+        res.status(200).json(teacher);
+    }
+    catch (error) {
+        console.log(error)
+        res.status(500).json({ message: 'Internal Server Error' });
     }
 }
 

@@ -5,28 +5,28 @@ const activitySchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    coverImage:{
-        type:String,
+    coverImage: {
+        type: String,
     },
     description: {
         type: String,
 
     },
-    order:{
-        type:Number,
-        default:0
+    order: {
+        type: Number,
+        default: 0
     },
     type: {
         type: String,
         required: true
     },
-    lessons:[
+    lessons: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'Lesson'        
+            ref: 'Lesson'
         }
     ],
-    homeworks:[{
+    homeworks: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Homework'
     }],
@@ -34,8 +34,31 @@ const activitySchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    progress: [
+        {
+            studentId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Student',
+                index:true,
+            },
+            status: {
+                type: String,
+                default: "Not Started",
+                index:true,
+            },
+            progress: {
+                type: Number,
+                default: 0
+            },
+            avg: {
+                type: Number,
+                default: 0
+            }
+
+        }
+    ]
 
 })
 
 const Activity = mongoose.model('Activity', activitySchema);
-module.exports=Activity;
+module.exports = Activity;

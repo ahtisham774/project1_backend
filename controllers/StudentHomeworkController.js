@@ -3,7 +3,7 @@ const StudentHomework = require("../models/StudentHomework")
 exports.assignHomework = async (req, res) => {
     try {
         const { month, year, title, link, description } = req.body
-        console.log(req.body)
+    
         const student = req.params.id
         const level = await StudentHomework.findOne({ student })
         const document = req?.file ? req?.file?.filename : ""
@@ -64,9 +64,7 @@ exports.assignHomework = async (req, res) => {
                         link,
                         description,
                         studentDownload: document,
-                        dueDate,
-                        isDone,
-                        percentage
+                
                     }]
 
                 })

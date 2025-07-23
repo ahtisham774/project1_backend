@@ -2,7 +2,8 @@ const mongoose = require("mongoose")
 const StudentGrammarResultSchema = new mongoose.Schema({
     student: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Student'
+        ref: 'Student',
+        index:true
     },
     grammarResults: [
         {
@@ -16,7 +17,8 @@ const StudentGrammarResultSchema = new mongoose.Schema({
             },
             quizId: {
                 type: mongoose.Schema.Types.ObjectId,
-                ref: 'Quiz'
+                ref: 'Quiz',
+                index:true
             },
             questions: [
                 {

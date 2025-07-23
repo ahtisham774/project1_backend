@@ -51,14 +51,24 @@ const studentSchema = new mongoose.Schema({
         monthlyClasses: [
             {
                 type: mongoose.Schema.Types.ObjectId,
-                ref: "Class"
+                ref: "Class",
+                index:true
+                
             }
         ]
     }],
     levels: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'Level'
+            ref: 'Level',
+            index:true
+        }
+    ],
+    useOfEnglish: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'UseOFEnglish',
+            index:true
         }
     ],
 

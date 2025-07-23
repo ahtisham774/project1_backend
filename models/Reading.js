@@ -19,11 +19,13 @@ const ReadingSchema = new mongoose.Schema({
     },
     readingGame: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Quiz'
+        ref: 'Quiz',
+        index:true
     },
     listeningGame: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Quiz'
+        ref: 'Quiz',
+        index:true
     },
     createdAt: {
         type: Date,
@@ -33,5 +35,28 @@ const ReadingSchema = new mongoose.Schema({
         type: Date,
         default: Date.now,
     },
+    progress: [
+        {
+            studentId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Student',
+                index:true
+            },
+            status: {
+                type: String,
+                default: "Not Started"
+            },
+            progress: {
+                type: Number,
+                default: 0
+            },
+            avg: {
+                type: Number,
+                default: 0
+            }
+
+        }
+    ]
+
 })
 module.exports = mongoose.model("Reading", ReadingSchema)
